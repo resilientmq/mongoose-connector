@@ -27,7 +27,7 @@ export class MongoosePublisherStore implements EventStore {
             );
         }
 
-        this.model = getEventModel('published_event_log', publisherConfig?.model);
+        this.model = getEventModel('publisher_event_log', publisherConfig?.model);
         this.serializer = publisherConfig?.serializer ?? DefaultEventSerializer;
     }
 

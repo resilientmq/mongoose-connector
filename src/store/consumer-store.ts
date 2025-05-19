@@ -27,7 +27,7 @@ export class MongooseConsumerStore implements EventStore {
             );
         }
 
-        this.model = getEventModel('published_event_log', consumerConfig?.model);
+        this.model = getEventModel('consumer_event_log', consumerConfig?.model);
         this.serializer = consumerConfig?.serializer ?? DefaultEventSerializer;
     }
 
