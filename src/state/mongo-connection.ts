@@ -51,7 +51,7 @@ export class MongoConnection {
     }
 
     /**
-     * Access to raw mongoose instance.
+     * Access to a raw mongoose instance.
      */
     public get client(): typeof mongoose {
         return mongoose;

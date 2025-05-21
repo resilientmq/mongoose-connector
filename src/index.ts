@@ -9,5 +9,4 @@ export * from './default/default-event.serializer';
 
 export * from './state/mongo-connection';
 
-export * from './store/consumer-store';
-export * from './store/publisher-store';
+export * from './store/generic-store';

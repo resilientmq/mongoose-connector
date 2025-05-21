@@ -1,5 +1,5 @@
-import type {EventMessage} from '@resilientmq/types__core';
-import {EventSerializer} from "@resilientmq/types__mongoose-connector/src/event-serializer";
+import {EventSerializer} from "../types";
+import {EventMessage} from "@resilientmq/core/types";
 
 /**
  * Default serializer assuming `_id`, `payload`, and `status` fields in the Mongo model.
@@ -18,7 +18,6 @@ export function getSerializer(model: any): EventSerializer {
 
         fromStorageFormat(doc: any): EventMessage {
             return {
-                id: doc._id.toString(),
                 messageId: doc._id.toString(),
                 payload: doc.payload,
                 status: doc.status,

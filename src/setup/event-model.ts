@@ -1,6 +1,5 @@
 import {Schema, model, Model} from 'mongoose';
-import type {EventMessage} from '@resilientmq/types__core';
-
+import {EventMessage} from "@resilientmq/core/types";
 /**
  * Returns a Mongoose model for EventMessage.
  *

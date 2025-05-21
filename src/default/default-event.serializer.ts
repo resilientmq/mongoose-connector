@@ -1,5 +1,5 @@
-import type {EventMessage} from '@resilientmq/types__core';
-import {EventSerializer} from "@resilientmq/types__mongoose-connector/src/event-serializer";
+import {EventSerializer} from "../types";
+import {EventMessage} from "@resilientmq/core/types";
 
 export const DefaultEventSerializer: EventSerializer = {
     toStorageFormat(event: EventMessage): any {

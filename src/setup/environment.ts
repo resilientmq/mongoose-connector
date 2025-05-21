@@ -1,6 +1,6 @@
-import {MongooseConnectorConfig} from "@resilientmq/types__mongoose-connector/src/mongo-connector-config";
 import {MongoConnection} from "../state/mongo-connection";
 import {setLogLevel} from "@resilientmq/core";
+import {MongooseConnectorConfig} from "../types";
 
 export class Environment {
     private static config: MongooseConnectorConfig;
