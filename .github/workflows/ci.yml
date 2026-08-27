@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - 'release/**'
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mongoose-connector-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  quality:
+    name: Quality - Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.19', '22', '24']
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:unit
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+  coverage:
+    name: Unit coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:coverage
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage/coverage-summary.json
+            coverage/lcov.info
+            coverage/lcov-report/
+          if-no-files-found: error
+          retention-days: 14
+
+  mongodb:
+    name: MongoDB integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:integration
+        env:
+          MONGODB_URL: mongodb://127.0.0.1:27017/resilientmq_connector_test
+
+  package:
+    name: Build and inspect package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [quality, coverage, mongodb]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require normalized npm metadata
+        shell: bash
+        run: |
+          cp package.json /tmp/package.json.before
+          npm pkg fix
+          if ! cmp -s package.json /tmp/package.json.before; then
+            echo "::error::package.json is not normalized; run npm pkg fix and commit the result"
+            git --no-pager diff -- package.json
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Inspect the publication tarball
+        shell: bash
+        run: |
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e "const [p]=require('/tmp/pack.json'); const f=p.files.map(x=>x.path); const leaked=f.filter(x=>/^(src|test|coverage|node_modules|\.github)\//.test(x)); if(leaked.length) throw new Error('Unexpected files: '+leaked.join(', ')); for(const required of ['dist/index.js','dist/index.d.ts','docs/compatibility.md']) if(!f.includes(required)) throw new Error('Missing '+required); console.log(p.name, p.version, p.files.length+' files', p.size+' bytes')"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-dist
+          path: dist/
+          retention-days: 7

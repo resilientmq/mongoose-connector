@@ -1,59 +1,45 @@
-import mongoose, {ConnectOptions} from "mongoose";
+import mongoose, {type ConnectOptions} from 'mongoose';
 
-/**
- * Singleton class for managing a single shared MongoDB connection.
- */
+/** Coordinates one shared Mongoose connection and concurrent startup calls. */
 export class MongoConnection {
-    private static instance: MongoConnection;
-    private isConnected = false;
+    private static instance: MongoConnection | undefined;
+    private connectPromise: Promise<void> | undefined;
 
-    private constructor() {
-    }
+    /** Creates a connection manager around an injectable Mongoose client. */
+    constructor(private readonly mongooseClient: typeof mongoose = mongoose) {}
 
-    /**
-     * Get the singleton instance.
-     */
-    public static getInstance(): MongoConnection {
-        if (!MongoConnection.instance) {
-            MongoConnection.instance = new MongoConnection();
-        }
+    /** Returns the process-wide default connection manager. */
+    static getInstance(): MongoConnection {
+        MongoConnection.instance ??= new MongoConnection();
         return MongoConnection.instance;
     }
 
-    /**
-     * Connect to MongoDB if not already connected.
-     *
-     * @param uri - MongoDB connection URI.
-     * @param options - Optional connection options.
-     */
-    public async connect(uri: string, options?: ConnectOptions): Promise<void> {
-        if (this.isConnected) return;
-
-        await mongoose.connect(uri, options);
-        this.isConnected = true;
+    /** Connects once and shares an in-flight connection attempt. */
+    async connect(uri: string, options?: ConnectOptions): Promise<void> {
+        if (this.status) return;
+        if (this.connectPromise) return this.connectPromise;
+        this.connectPromise = this.mongooseClient.connect(uri, options).then(() => undefined);
+        try {
+            await this.connectPromise;
+        } finally {
+            this.connectPromise = undefined;
+        }
     }
 
-    /**
-     * Disconnect from MongoDB.
-     */
-    public async disconnect(): Promise<void> {
-        if (!this.isConnected) return;
-
-        await mongoose.disconnect();
-        this.isConnected = false;
+    /** Waits for startup and disconnects an active client. */
+    async disconnect(): Promise<void> {
+        if (this.connectPromise) await this.connectPromise;
+        if (this.mongooseClient.connection.readyState === 0) return;
+        await this.mongooseClient.disconnect();
     }
 
-    /**
-     * Returns whether a connection is active.
-     */
-    public get status(): boolean {
-        return this.isConnected;
+    /** Indicates whether Mongoose reports an active connection. */
+    get status(): boolean {
+        return this.mongooseClient.connection.readyState === 1;
     }
 
-    /**
-     * Access to a raw mongoose instance.
-     */
-    public get client(): typeof mongoose {
-        return mongoose;
+    /** Exposes the managed Mongoose client for model registration. */
+    get client(): typeof mongoose {
+        return this.mongooseClient;
     }
 }

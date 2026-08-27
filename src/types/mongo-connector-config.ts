@@ -1,65 +1,45 @@
-import {ConnectOptions, Model} from "mongoose";
-import {EventSerializer} from "./event-serializer";
-import {ResilientConsumerConfig, ResilientPublisherConfig} from "@resilientmq/core/types";
+import type {ResilientConsumerConfig, ResilientPublisherConfig} from '@resilientmq/core/dist/types/index.js';
+import type {ConnectOptions, Model} from 'mongoose';
+import type {EventSerializer} from './event-serializer.js';
 
-/**
- * Configuration structure for initializing the environment in the Mongoose connector.
- */
-export type MongooseConnectorConfig = {
-    /**
-     * MongoDB connection settings.
-     */
+/** Persistence customization shared by consumer and publisher stores. */
+export interface MongooseStoreOptions {
+    /** Existing application-owned model. */
+    model?: Model<any>;
+
+    /** Serializer matching the custom model. */
+    serializer?: EventSerializer;
+
+    /** Model name used when the connector creates its default model. */
+    modelName?: string;
+}
+
+/** Consumer configuration without the connector-owned store. */
+export type MongooseConsumerConfig = Omit<ResilientConsumerConfig, 'store'> & MongooseStoreOptions;
+
+/** Publisher configuration without the connector-owned store. */
+export type MongoosePublisherConfig = Omit<ResilientPublisherConfig, 'store'> & MongooseStoreOptions;
+
+/** Configuration for one object-oriented Mongoose connector runtime. */
+export interface MongooseConnectorConfig {
+    /** MongoDB connection settings. */
     mongo: {
-        /**
-         * MongoDB URI (e.g. mongodb://localhost:27017).
-         */
+        /** MongoDB connection URI. */
         uri: string;
 
-        /**
-         * Optional connection options for Mongoose.
-         */
+        /** Optional Mongoose connection options. */
         options?: ConnectOptions;
     };
 
-    /**
-     * RabbitMQ configuration including consumer and publisher settings.
-     */
+    /** Optional RabbitMQ runtimes created by this connector. */
     rabbit: {
-        /**
-         * Consumer configuration (from core ResilientMQ).
-         * You do **not** need to include the `store`, it is injected by this connector.
-         */
-        consumer: Omit<ResilientConsumerConfig, 'store'> & {
-            /**
-             * Optional custom Mongoose model to use for storing consumed events.
-             */
-            model?: Model<any>;
+        /** Consumer runtime configuration. */
+        consumer?: MongooseConsumerConfig;
 
-            /**
-             * Optional serializer to convert between event format and DB format.
-             */
-            serializer?: EventSerializer;
-        };
-
-        /**
-         * Publisher configuration (from core ResilientMQ).
-         * You do **not** need to include the `store`, it is injected by this connector.
-         */
-        publisher: Omit<ResilientPublisherConfig, 'store'> & {
-            /**
-             * Optional custom Mongoose model to use for storing published events.
-             */
-            model?: Model<any>;
-
-            /**
-             * Optional serializer to convert between the event format and DB format.
-             */
-            serializer?: EventSerializer;
-        };
+        /** Publisher runtime configuration. */
+        publisher?: MongoosePublisherConfig;
     };
 
-    /**
-     * Global log level (overrides default).
-     */
+    /** ResilientMQ logger verbosity. */
     logLevel?: 'none' | 'warn' | 'info' | 'error';
-};
+}
