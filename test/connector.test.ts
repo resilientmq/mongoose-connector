@@ -7,6 +7,18 @@ const runtime = vi.hoisted(() => ({
 }));
 
 vi.mock('@resilientmq/core', () => ({
+    EventConsumeStatus: {
+        RECEIVED: 'RECEIVED',
+        PROCESSING: 'PROCESSING',
+        DONE: 'DONE',
+        ERROR: 'ERROR',
+        RETRY: 'RETRY'
+    },
+    EventPublishStatus: {
+        PENDING: 'PENDING_PUBLICATION',
+        PUBLISHED: 'PUBLISHED',
+        ERROR: 'PUBLICATION_ERROR'
+    },
     ResilientConsumer: class {
         readonly start = vi.fn().mockResolvedValue(undefined);
         readonly stop = vi.fn().mockResolvedValue(undefined);

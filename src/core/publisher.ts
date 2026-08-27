@@ -1,4 +1,4 @@
-import type {EventMessage} from '@resilientmq/core/dist/types/index.js';
+import type {EventMessage} from '@resilientmq/core';
 import {Environment} from '../setup/environment.js';
 
 /** Publishes through the long-lived publisher configured by `setEnvironment`. */

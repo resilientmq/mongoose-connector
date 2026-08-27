@@ -10,8 +10,20 @@ describe('getEventModel', () => {
         const first = getEventModel(name);
         const second = getEventModel(name);
         expect(second).toBe(first);
-        expect(first.schema.path('messageId').options).toMatchObject({required: true, unique: true});
+        expect(first.schema.path('messageId').options).toMatchObject({required: true});
+        const publisherIdentity = first.schema.indexes().find(([fields]) => fields.messageId === 1);
+        expect(publisherIdentity?.[1]).toMatchObject({unique: true});
         expect(first.schema.path('id')).toBeUndefined();
         expect(first.schema.path('routingKey')).toBeDefined();
+        expect(first.schema.path('fencingToken')).toBeDefined();
+        expect(first.schema.path('leaseExpiresAt')).toBeDefined();
+    });
+
+    it('uses service and message identity for consumer models', () => {
+        const model = getEventModel(`ResilientMqConsumer${Date.now()}`, undefined, undefined, 'consumer');
+        const consumerIdentity = model.schema.indexes().find(([fields]) => (
+            fields.serviceId === 1 && fields.messageId === 1
+        ));
+        expect(consumerIdentity?.[1]).toMatchObject({unique: true});
     });
 });

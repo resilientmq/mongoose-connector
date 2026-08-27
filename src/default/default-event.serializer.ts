@@ -1,4 +1,4 @@
-import type {EventMessage} from '@resilientmq/core/dist/types/index.js';
+import type {EventMessage} from '@resilientmq/core';
 import type {EventSerializer, StoredEventDocument} from '../types/index.js';
 
 interface DocumentWithToObject {

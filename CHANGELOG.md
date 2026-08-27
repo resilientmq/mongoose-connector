@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-28
+
+### Added
+
+- Atomic inbox claims keyed by stable service identity and message ID.
+- Expiring consumer and publisher leases with per-claim fencing tokens.
+- Distributed, bounded outbox batch claims across competing replicas.
+- Fenced completion, delayed release, expired-lease recovery, and persisted
+  attempt, timestamp, and error metadata.
+- Real MongoDB concurrency tests for exclusive claims and stale-owner rejection.
+- Real MongoDB compatibility coverage for Mongoose 8 and Mongoose 9.
+
+### Changed
+
+- Raised the connector package and peer contract to `@resilientmq/core` 3.x.
+- Extended the default models and indexes for Core 3 lease-based persistence.
+- Updated the professional README and dynamic contributor section for the Core
+  3 release line.
+
 ## [2.0.0] - 2026-08-28
 
 ### Added
@@ -48,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package-scoped `dist` export.
 - Raised the runtime requirement to Node.js 20.19.
 
-[Unreleased]: https://github.com/resilientmq/mongoose-connector/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/resilientmq/mongoose-connector/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/resilientmq/mongoose-connector/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/resilientmq/mongoose-connector/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/resilientmq/mongoose-connector/releases/tag/v1.0.0
