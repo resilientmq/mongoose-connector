@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Standardized the README with package and runtime badges, compatibility and
+  lifecycle references, operational guarantees, architecture, documentation
+  navigation, and a dynamically generated contributor gallery.
+
 ## [1.0.0] - 2026-08-27
 
 ### Added
