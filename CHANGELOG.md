@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-28
+
+### Added
+
+- Explicit compatibility with `@resilientmq/core` 2.3.1.
+- Native idempotent insertion, exact-status queries, and bulk status updates for
+  the Core 2 optimized event-store surface.
+
 ### Changed
 
+- Raised the connector package and peer contract to the Core 2 major line.
 - Standardized the README with package and runtime badges, compatibility and
   lifecycle references, operational guarantees, architecture, documentation
   navigation, and a dynamically generated contributor gallery.
@@ -39,5 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package-scoped `dist` export.
 - Raised the runtime requirement to Node.js 20.19.
 
-[Unreleased]: https://github.com/resilientmq/mongoose-connector/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/resilientmq/mongoose-connector/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/resilientmq/mongoose-connector/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/resilientmq/mongoose-connector/releases/tag/v1.0.0

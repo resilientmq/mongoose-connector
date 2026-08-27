@@ -2,7 +2,7 @@
 
 <!-- Package -->
 [![npm version](https://img.shields.io/npm/v/@resilientmq/mongoose-connector.svg?logo=npm)](https://www.npmjs.com/package/@resilientmq/mongoose-connector)
-[![CI](https://img.shields.io/github/actions/workflow/status/resilientmq/mongoose-connector/ci.yml?branch=release%2Fcore-1.x&logo=github&label=CI)](https://github.com/resilientmq/mongoose-connector/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/resilientmq/mongoose-connector/ci.yml?branch=release%2Fcore-2.x&logo=github&label=CI)](https://github.com/resilientmq/mongoose-connector/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
@@ -10,7 +10,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%20%7C%2022%20%7C%2024-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Mongoose](https://img.shields.io/badge/Mongoose-8%20%7C%209-880000?logo=mongoose&logoColor=white)](https://mongoosejs.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-8-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![ResilientMQ core](https://img.shields.io/badge/ResilientMQ_core-1.x-5C2D91)](https://www.npmjs.com/package/@resilientmq/core)
+[![ResilientMQ core](https://img.shields.io/badge/ResilientMQ_core-2.x-5C2D91)](https://www.npmjs.com/package/@resilientmq/core)
 
 > Durable MongoDB inbox and outbox persistence for
 > [`@resilientmq/core`](https://www.npmjs.com/package/@resilientmq/core), with
@@ -72,10 +72,11 @@ Install the connector major matching the `@resilientmq/core` major:
 | 2.x | `^2.3.1` | 8.x–9.x | 20.19, 22, 24 | Idempotent batch operations |
 | 3.x | `^3.0.0` | 8.x–9.x | 20.19, 22, 24 | Atomic leases and fencing |
 
-This branch builds connector 1.x for the latest core 1.x contract. Core 1 does
-not expose the lease and fencing primitives required to coordinate ownership
-after a process failure. Applications requiring replica-safe claims must use
-core and connector 3.x together.
+This branch builds connector 2.x for the latest core 2.x contract. It uses the
+idempotent insertion, status query, and batch update operations added by Core 2.
+Core 2 still does not expose the leases and fencing required to coordinate
+ownership after a process failure. Applications requiring replica-safe claims
+must use core and connector 3.x together.
 
 Every supported Node.js line, the declared core peer dependency, Mongoose, and
 a real MongoDB 8 service are exercised by CI.
@@ -83,7 +84,7 @@ a real MongoDB 8 service are exercised by CI.
 ## Installation
 
 ```bash
-npm install @resilientmq/core@^1.2.12 mongoose @resilientmq/mongoose-connector@^1
+npm install @resilientmq/core@^2.3.1 mongoose @resilientmq/mongoose-connector@^2
 ```
 
 ## Quick start
@@ -150,7 +151,8 @@ event.
 - Message handlers and external domain effects must therefore remain
   idempotent.
 
-Connector 1.x prevents duplicate persisted identities, but it cannot offer the
+Connector 2.x prevents duplicate persisted identities and reduces status-update
+round trips, but it cannot offer the
 atomic lease recovery and stale-owner fencing introduced by core 3.x. The
 [compatibility guide](docs/compatibility.md) documents this distinction in
 detail.
@@ -189,8 +191,7 @@ The facade delegates to the same reusable connector lifecycle.
 
 ## Event store
 
-`GenericMongooseStore` implements the core 1.x `EventStore` contract and the
-optional operations used by the core 2.x line:
+`GenericMongooseStore` implements the full core 2.x `EventStore` contract:
 
 | Operation | MongoDB behavior |
 | --- | --- |

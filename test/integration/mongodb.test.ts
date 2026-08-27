@@ -40,4 +40,30 @@ integration('MongoDB integration', () => {
         await store.updateEventStatus(first, 'PUBLISHED' as never);
         expect((await store.getEvent(first))?.status).toBe('PUBLISHED');
     });
+
+    it('queries exact statuses and applies Core 2 bulk transitions', async () => {
+        const pending: EventMessage = {
+            messageId: 'bulk-pending',
+            payload: {position: 1},
+            status: 'PENDING_PUBLICATION'
+        };
+        const failed: EventMessage = {
+            messageId: 'bulk-failed',
+            payload: {position: 2},
+            status: 'ERROR'
+        };
+        await store.saveEvent(pending);
+        await store.saveEvent(failed);
+
+        const initialPending = await store.getEventsByStatus('PENDING_PUBLICATION' as never);
+        expect(initialPending.map(event => event.messageId)).toEqual(['bulk-pending']);
+
+        await store.batchUpdateEventStatus([
+            {event: pending, status: 'PUBLISHED' as never},
+            {event: failed, status: 'PENDING_PUBLICATION' as never}
+        ]);
+
+        expect((await store.getEvent(pending))?.status).toBe('PUBLISHED');
+        expect((await store.getEvent(failed))?.status).toBe('PENDING_PUBLICATION');
+    });
 });

@@ -8,7 +8,7 @@ import type {Model} from 'mongoose';
 import {DefaultEventSerializer} from '../default/default-event.serializer.js';
 import type {EventSerializer, StoredEventDocument} from '../types/index.js';
 
-/** MongoDB-backed core 1.x event store with serializer-defined identity. */
+/** MongoDB-backed core 2.x event store with serializer-defined identity. */
 export class GenericMongooseStore implements EventStore {
     /** Creates a store over one Mongoose model. */
     constructor(

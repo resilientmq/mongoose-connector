@@ -7,7 +7,7 @@ interface DocumentWithToObject {
 
 /** Default serializer for the connector-owned event model. */
 export class StandardEventSerializer implements EventSerializer {
-    /** Serializes every ResilientMQ event field used by core 1.x. */
+    /** Serializes every ResilientMQ event field used by the supported core contract. */
     toStorageFormat(event: EventMessage): StoredEventDocument {
         return {
             messageId: event.messageId,
