@@ -1,171 +1,323 @@
 # @resilientmq/mongoose-connector
 
-Mongoose connector for ResilientMQ, enabling seamless integration with MongoDB using Mongoose.
-Handles event storage, status tracking, and serializer support out-of-the-box.
+<!-- Package -->
+[![npm version](https://img.shields.io/npm/v/@resilientmq/mongoose-connector.svg?logo=npm)](https://www.npmjs.com/package/@resilientmq/mongoose-connector)
+[![CI](https://img.shields.io/github/actions/workflow/status/resilientmq/mongoose-connector/ci.yml?branch=release%2Fcore-1.x&logo=github&label=CI)](https://github.com/resilientmq/mongoose-connector/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-## Table of Contents
+<!-- Runtime -->
+[![Node.js](https://img.shields.io/badge/Node.js-20.19%20%7C%2022%20%7C%2024-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Mongoose](https://img.shields.io/badge/Mongoose-8%20%7C%209-880000?logo=mongoose&logoColor=white)](https://mongoosejs.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-8-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![ResilientMQ core](https://img.shields.io/badge/ResilientMQ_core-1.x-5C2D91)](https://www.npmjs.com/package/@resilientmq/core)
 
-- [📦 Installation](#-installation)
-- [📚 Purpose](#-purpose)
-- [🧩 Main Concepts](#-main-concepts)
-- [🔧 Config: MongooseConnectorConfig](#-config-mongooseconnectorconfig)
-- [🧩 Custom Event Storage Format](#-custom-event-storage-format)
-    - [🔄 Example: Custom Storage Serializer](#-example-custom-storage-serializer)
-- [🚀 Example: Consumer](#-example-consumer)
-- [🚀 Example: Publisher](#-example-publisher)
-- [🧪 Tests](#-tests)
-- [Docs](#docs)
-- [LICENSE](#license)
+> Durable MongoDB inbox and outbox persistence for
+> [`@resilientmq/core`](https://www.npmjs.com/package/@resilientmq/core), with
+> Mongoose models, idempotent insertion, bounded backlog reads, and reusable
+> RabbitMQ runtimes.
 
-## 📦 Installation
+```ts
+const connector = new MongooseConnector(config);
+await connector.startConsumer();
+await connector.publish(event);
+```
+
+---
+
+## Table of contents
+
+- [Features](#features)
+- [Compatibility](#compatibility)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Delivery model](#delivery-model)
+- [Connector lifecycle](#connector-lifecycle)
+- [Event store](#event-store)
+- [Custom models and serialization](#custom-models-and-serialization)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Version lines](#version-lines)
+- [Development](#development)
+- [Documentation](#documentation)
+- [Contributors](#contributors)
+- [License](#license)
+
+---
+
+## Features
+
+- **Durable inbox and outbox** — persists ResilientMQ event state in MongoDB.
+- **Idempotent insertion** — converts MongoDB duplicate-key conflicts into a
+  deterministic `false` result.
+- **Efficient backlog processing** — bounded, oldest-first pending queries and
+  one-call `bulkWrite` status transitions.
+- **Reusable connections** — one object-oriented runtime shares MongoDB and
+  long-lived RabbitMQ consumer and publisher resources.
+- **Independent stores** — consumer and publisher models and serializers never
+  leak into each other.
+- **Custom persistence** — applications may provide their own Mongoose model,
+  identity filter, status field, and serialization format.
+- **Safe shutdown** — RabbitMQ runtimes stop before the shared MongoDB
+  connection is closed.
+- **Typed API** — ESM package with generated TypeScript declarations.
+
+## Compatibility
+
+Install the connector major matching the `@resilientmq/core` major:
+
+| Connector | ResilientMQ core | Mongoose | Node.js | Ownership model |
+| --- | --- | --- | --- | --- |
+| 1.x | `^1.2.12` | 8.x–9.x | 20.19, 22, 24 | Durable CRUD and deduplication |
+| 2.x | `^2.3.1` | 8.x–9.x | 20.19, 22, 24 | Idempotent batch operations |
+| 3.x | `^3.0.0` | 8.x–9.x | 20.19, 22, 24 | Atomic leases and fencing |
+
+This branch builds connector 1.x for the latest core 1.x contract. Core 1 does
+not expose the lease and fencing primitives required to coordinate ownership
+after a process failure. Applications requiring replica-safe claims must use
+core and connector 3.x together.
+
+Every supported Node.js line, the declared core peer dependency, Mongoose, and
+a real MongoDB 8 service are exercised by CI.
+
+## Installation
 
 ```bash
-npm install @resilientmq/mongoose-connector
+npm install @resilientmq/core@^1.2.12 mongoose @resilientmq/mongoose-connector@^1
 ```
 
-## 📚 Purpose
+## Quick start
 
-This package acts as a wrapper for the ResilientMQ core logic and provides MongoDB-backed event persistence.
-
-- Automatically injects Mongoose-based `EventStore`
-- Manages a singleton DB connection
-- Allows full schema customization via serializer
-
----
-
-## 🧩 Main Concepts
-
-| Feature | Description |
-|--------|-------------|
-| `setEnvironment(config)` | Initializes Mongo + RabbitMQ settings |
-| `consume()` | Starts consumer with Mongo-backed storage |
-| `publish(event)` | Publishes using resilient pattern |
-| `serializer` | Transforms event ↔ DB formats |
-| `singleton` | Keeps one shared MongoDB connection |
-
----
-
-## 🔧 Config: `MongooseConnectorConfig`
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `mongo.uri` | `string` | ✅ | MongoDB URI |
-| `mongo.options` | `ConnectOptions` | ❌ | Optional connection opts |
-| `rabbit.consumer` | `Omit<ResilientConsumerConfig, 'store'>` | ❌ | Consumer settings |
-| `rabbit.consumer.model` | `Model` | ❌ | Custom Mongoose model |
-| `rabbit.consumer.serializer` | `EventSerializer` | ❌ | Custom serializer |
-| `rabbit.publisher` | `Omit<ResilientPublisherConfig, 'store'>` | ❌ | Publisher settings |
-| `rabbit.publisher.model` | `Model` | ❌ | Custom Mongoose model |
-| `rabbit.publisher.serializer` | `EventSerializer` | ❌ | Custom serializer |
-| `logLevel` | `'none' \| 'warn' \| 'info' \| 'error'` | ❌ | Logger verbosity |
-
----
-
-## 🧩 Custom Event Storage Format
-
-Supports pluggable serializers to convert the event to your preferred DB structure.
-
-### 🔄 Example: Custom Storage Serializer
+Prefer one `MongooseConnector` per application process:
 
 ```ts
-const serializer = {
-  toStorageFormat(event) {
-    return {
-      _id: event.id,
-      body: event.payload,
-      customStatus: event.status
-    };
-  },
-  fromStorageFormat(doc) {
-    return {
-      id: doc._id,
-      messageId: doc._id,
-      payload: doc.body,
-      status: doc.customStatus,
-      type: 'custom.type'
-    };
-  },
-  getStatusField() {
-    return 'customStatus';
-  }
-};
-```
+import {randomUUID} from 'node:crypto';
+import {MongooseConnector} from '@resilientmq/mongoose-connector';
 
----
-
-## 🚀 Example: Consumer
-
-```ts
-import { setEnvironment, consume } from '@resilientmq/mongoose-connector';
-
-await setEnvironment({
+const connector = new MongooseConnector({
   mongo: {
-    uri: 'mongodb://localhost:27017/events'
+    uri: process.env.MONGODB_URL!
   },
   rabbit: {
     consumer: {
-      connection: 'amqp://localhost',
+      connection: process.env.AMQP_URL!,
       consumeQueue: {
-        queue: 'my.queue',
-        options: { durable: true }
+        queue: 'orders.events',
+        options: {durable: true}
       },
-      eventsToProcess: [
-        { type: 'my.event', handler: async (payload) => console.log(payload) }
-      ]
+      eventsToProcess: [{
+        type: 'order.created',
+        handler: async event => processOrder(event.payload)
+      }]
     },
     publisher: {
-      connection: 'amqp://localhost'
+      connection: process.env.AMQP_URL!,
+      exchange: {
+        name: 'domain.events',
+        type: 'topic',
+        options: {durable: true}
+      }
     }
   }
 });
 
-await consume();
-```
-
----
-
-## 🚀 Example: Publisher
-
-```ts
-import { publish } from '@resilientmq/mongoose-connector';
-
-await publish({
-  id: 'evt-1',
-  messageId: 'msg-1',
-  type: 'user.created',
-  payload: { name: 'Alice' },
+await connector.startConsumer();
+await connector.publish({
+  messageId: randomUUID(),
+  type: 'order.accepted',
+  routingKey: 'order.accepted',
+  payload: {orderId: 'order-42'},
   status: 'PENDING_PUBLICATION'
+});
+
+process.once('SIGTERM', () => {
+  void connector.disconnect();
 });
 ```
 
----
+The connector opens MongoDB lazily, creates each RabbitMQ runtime once, and
+reuses the publisher across calls. It does not connect and disconnect for every
+event.
 
-## 🧪 Tests
+## Delivery model
 
-- ✅ Unit tested
-- ✅ Uses Jest + mocks
-- ✅ Compatible with `jest --coverage`
+- MongoDB provides durable event state and a unique message identity.
+- Duplicate inserts are rejected by the database rather than by an unsafe
+  read-before-write check.
+- Pending publication reads are ordered by creation time and explicitly
+  bounded.
+- RabbitMQ and MongoDB do not participate in one distributed transaction.
+- Message handlers and external domain effects must therefore remain
+  idempotent.
 
----
+Connector 1.x prevents duplicate persisted identities, but it cannot offer the
+atomic lease recovery and stale-owner fencing introduced by core 3.x. The
+[compatibility guide](docs/compatibility.md) documents this distinction in
+detail.
 
-## 👥 Contributors
+## Connector lifecycle
 
-<table>
-  <tbody>
-    <tr>
-      <td align="center" valign="top" width="14.28%">
-        <a href="https://github.com/hector-ae21">
-          <img src="https://avatars.githubusercontent.com/u/87265357?v=4" width="100px;" alt="Hector L. Arrechea"/>
-          <br /><sub><b>Hector L. Arrechea</b></sub>
-        </a>
-        <br /><a title="Code">💻</a> <a title="Documentation">📖</a> <a title="Infra">🚇</a> <a title="Tests">⚠️</a>
-      </td>
-    </tr>
-  </tbody>
-</table>
+`MongooseConnector` owns the runtimes it creates while retaining one shared
+MongoDB connection:
 
----
+| Method | Behavior |
+| --- | --- |
+| `connect()` | Opens MongoDB if it is not already connected. |
+| `createConsumer()` | Lazily creates and reuses the configured consumer. |
+| `startConsumer()` | Connects MongoDB and starts the consumer. |
+| `createPublisher()` | Lazily creates and reuses the configured publisher. |
+| `publish(event, options?)` | Connects MongoDB and publishes through the reusable publisher. |
+| `disconnect()` | Stops consumer and publisher, then closes MongoDB. |
 
-## 📄 License
+Existing applications can retain the functional compatibility facade:
 
-[MIT](LICENSE)
+```ts
+import {
+  consume,
+  disconnect,
+  publish,
+  setEnvironment
+} from '@resilientmq/mongoose-connector';
+
+await setEnvironment(config);
+await consume();
+await publish(event);
+await disconnect();
+```
+
+The facade delegates to the same reusable connector lifecycle.
+
+## Event store
+
+`GenericMongooseStore` implements the core 1.x `EventStore` contract and the
+optional operations used by the core 2.x line:
+
+| Operation | MongoDB behavior |
+| --- | --- |
+| `saveEvent` | Creates one event document. |
+| `saveEventIfNotExists` | Uses the unique index and handles error `11000`. |
+| `getEvent` / `deleteEvent` | Uses the serializer-defined identity filter. |
+| `updateEventStatus` | Updates the serializer-defined status path. |
+| `getPendingEvents` | Returns a bounded, oldest-first batch. |
+| `getEventsByStatus` | Returns events matching an exact status. |
+| `batchUpdateEventStatus` | Applies transitions through one `bulkWrite`. |
+
+The default model persists `messageId`, `type`, `payload`, `status`,
+`routingKey`, and AMQP `properties`. Default indexes cover message identity and
+pending status scans.
+
+## Custom models and serialization
+
+Consumer and publisher stores accept independent `model`, `modelName`, and
+`serializer` settings. A custom serializer must match its model and define the
+identity filter whenever the event ID is not stored at `messageId`:
+
+```ts
+import type {EventSerializer} from '@resilientmq/mongoose-connector';
+
+const serializer: EventSerializer = {
+  toStorageFormat: event => ({
+    _id: event.messageId,
+    body: event.payload,
+    lifecycle: event.status
+  }),
+  fromStorageFormat: document => ({
+    messageId: String(document._id),
+    payload: document.body,
+    status: String(document.lifecycle)
+  }),
+  getIdentityFilter: event => ({_id: event.messageId}),
+  getStatusField: () => 'lifecycle'
+};
+```
+
+Serializer objects must be stateless or safe for concurrent calls.
+
+## Configuration
+
+```ts
+new MongooseConnector({mongo, rabbit, logLevel});
+```
+
+| Option | Required | Description |
+| --- | :---: | --- |
+| `mongo.uri` | Yes | MongoDB connection URI. |
+| `mongo.options` | No | Application-specific Mongoose connection options. |
+| `rabbit.consumer` | No | Core consumer configuration plus optional store customization. |
+| `rabbit.publisher` | No | Core publisher configuration plus optional store customization. |
+| `rabbit.*.model` | No | Existing application-owned Mongoose model. |
+| `rabbit.*.modelName` | No | Name used when creating the default model. |
+| `rabbit.*.serializer` | No | Serializer matching the selected model. |
+| `logLevel` | No | `none`, `warn`, `info`, or `error`. |
+
+The application supplies at least the RabbitMQ runtime it intends to use.
+Calling a consumer or publisher method without its matching configuration fails
+immediately with a descriptive error.
+
+## Architecture
+
+```text
+Application
+  └─ MongooseConnector
+      ├─ ResilientConsumer ── GenericMongooseStore ── consumer model
+      ├─ ResilientPublisher ─ GenericMongooseStore ── publisher model
+      └─ MongoConnection ───────────────────────────── MongoDB
+```
+
+The connector separates RabbitMQ runtime ownership from persistence mapping.
+Both stores share the MongoDB connection, while their models and serializers
+remain isolated.
+
+## Version lines
+
+The connector majors are maintained as sequential compatibility branches:
+
+| Branch | Package line | Purpose |
+| --- | --- | --- |
+| `release/core-1.x` | 1.x | Latest core 1.x CRUD contract. |
+| `release/core-2.x` | 2.x | Core 2 batch and idempotent store contract. |
+| `release/core-3.x` | 3.x | Atomic inbox/outbox leases and fencing. |
+
+Upgrade one major at a time. The peer dependency deliberately rejects unsupported
+core/connector combinations instead of allowing a resilience contract to degrade
+silently.
+
+## Development
+
+```bash
+npm ci
+npm run typecheck
+npm run test:coverage
+npm run build
+npm audit --audit-level=high
+npm pack --dry-run
+```
+
+Run the real MongoDB integration suite with:
+
+```bash
+MONGODB_URL=mongodb://localhost:27017/resilientmq npm run test:integration
+```
+
+CI validates Node.js 20.19, 22, and 24, enforces at least 90% statement, line,
+and function coverage plus 80% branch coverage, and exercises MongoDB 8.
+
+## Documentation
+
+- [Compatibility and release guarantees](docs/compatibility.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [CI and trusted publishing](.github/workflows/README.md)
+
+## Contributors
+
+Thanks to everyone who has contributed to this project:
+
+[![Contributors](https://contrib.rocks/image?repo=resilientmq/mongoose-connector)](https://github.com/resilientmq/mongoose-connector/graphs/contributors)
+
+Want to help? Read [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE) © [ResilientMQ](https://github.com/resilientmq)

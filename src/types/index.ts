@@ -1,2 +1,10 @@
-export * from './mongo-connector-config';
-export * from './event-serializer';
+export type {
+    EventSerializer,
+    StoredEventDocument
+} from './event-serializer.js';
+export type {
+    MongooseConnectorConfig,
+    MongooseConsumerConfig,
+    MongoosePublisherConfig,
+    MongooseStoreOptions
+} from './mongo-connector-config.js';
