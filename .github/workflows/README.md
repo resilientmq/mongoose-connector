@@ -6,6 +6,12 @@ Validates Node.js 20.19, 22, and 24; type checking; unit tests; enforced
 coverage; npm audit; a real MongoDB 8 integration test; build output; normalized
 package metadata; and publication tarball contents.
 
+After a successful push to `master`, CI reads the version from `package.json`.
+If its `vX.Y.Z` tag does not exist, CI creates an annotated tag from the
+matching changelog section and explicitly starts `release.yml` on that tag.
+Existing tags are left unchanged. Release integration branches are validated
+but cannot publish before their pull request is merged.
+
 ## `release.yml`
 
 Validates SemVer tags and publishes with npm trusted publishing. Configure this
