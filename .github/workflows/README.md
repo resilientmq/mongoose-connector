@@ -3,8 +3,8 @@
 ## `ci.yml`
 
 Validates Node.js 20.19, 22, and 24; type checking; unit tests; enforced
-coverage; npm audit; a real MongoDB 8 integration test; build output; normalized
-package metadata; and publication tarball contents.
+coverage; npm audit; real MongoDB 8 integration tests with Mongoose 8 and 9;
+build output; normalized package metadata; and publication tarball contents.
 
 After a successful push to `master`, CI reads the version from `package.json`.
 If its `vX.Y.Z` tag does not exist, CI creates an annotated tag from the

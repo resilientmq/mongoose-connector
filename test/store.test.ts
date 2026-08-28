@@ -1,4 +1,4 @@
-import type {EventMessage} from '@resilientmq/core/dist/types/index.js';
+import type {EventMessage} from '@resilientmq/core';
 import type {Model} from 'mongoose';
 import {GenericMongooseStore, type EventSerializer} from '../src/index.js';
 
@@ -61,6 +61,122 @@ describe('GenericMongooseStore', () => {
         fake.create.mockRejectedValueOnce(new Error('offline'));
         await expect(store.saveEventIfNotExists(event('offline'))).rejects.toThrow('offline');
     });
+
+    it('acquires, reports, and transitions fenced inbox leases', async () => {
+        const leaseExpiresAt = new Date(2_000);
+        const fake = fakeModel({
+            findOneAndUpdate: [document(event('acquired')), null, null],
+            findOneSequence: [
+                document({...event('done'), status: 'DONE'}),
+                {toObject: () => ({...event('busy'), status: 'PROCESSING', leaseExpiresAt})}
+            ],
+            updateOneResults: [{matchedCount: 1}, {matchedCount: 0}]
+        });
+        const store = new GenericMongooseStore(fake.model);
+        const request = {
+            event: event('acquired'),
+            serviceId: 'service',
+            instanceId: 'instance-a',
+            attempt: 2,
+            leaseDurationMs: 1_000,
+            now: 1_000
+        };
+
+        await expect(store.claimConsumeEvent(request)).resolves.toMatchObject({
+            outcome: 'acquired',
+            leaseExpiresAt: 2_000
+        });
+        await expect(store.claimConsumeEvent({...request, event: event('done')})).resolves.toEqual({
+            outcome: 'completed'
+        });
+        await expect(store.claimConsumeEvent({...request, event: event('busy')})).resolves.toEqual({
+            outcome: 'busy',
+            leaseExpiresAt: 2_000
+        });
+
+        const transition = {
+            event: event('acquired'),
+            serviceId: 'service',
+            instanceId: 'instance-a',
+            fencingToken: 'token',
+            status: 'DONE' as never,
+            now: 1_500
+        };
+        await expect(store.transitionConsumeEvent(transition)).resolves.toBe(true);
+        await expect(store.transitionConsumeEvent(transition)).resolves.toBe(false);
+    });
+
+    it('stabilizes inbox contention and preserves database failures', async () => {
+        const duplicate = Object.assign(new Error('duplicate'), {code: 11_000});
+        const contended = fakeModel({
+            findOneAndUpdate: [duplicate],
+            findOneSequence: [{status: 'PROCESSING', leaseExpiresAt: 2_500}]
+        });
+        const request = {
+            event: event('contended'),
+            serviceId: 'service',
+            instanceId: 'instance',
+            attempt: 1,
+            leaseDurationMs: 1_000,
+            now: 1_000
+        };
+        await expect(new GenericMongooseStore(contended.model).claimConsumeEvent(request)).resolves.toEqual({
+            outcome: 'busy',
+            leaseExpiresAt: 2_500
+        });
+
+        const deleted = fakeModel({
+            findOneAndUpdate: [null, null, null, null],
+            findOneSequence: [null, null, null, null]
+        });
+        await expect(new GenericMongooseStore(deleted.model).claimConsumeEvent(request)).rejects.toThrow(
+            /could not stabilize/
+        );
+
+        const offline = fakeModel({findOneAndUpdate: [new Error('offline')]});
+        await expect(new GenericMongooseStore(offline.model).claimConsumeEvent(request)).rejects.toThrow('offline');
+    });
+
+    it('claims and applies fenced outbox transitions', async () => {
+        const fake = fakeModel({
+            findOneAndUpdate: [
+                document(event('known')),
+                document(event('batch-1')),
+                document(event('batch-2')),
+                null
+            ],
+            updateOneResults: [{matchedCount: 1}, {matchedCount: 1}]
+        });
+        const store = new GenericMongooseStore(fake.model);
+        const owner = {
+            serviceId: 'publisher',
+            instanceId: 'instance-p',
+            leaseDurationMs: 1_000,
+            now: 5_000
+        };
+
+        await expect(store.claimPublishEvent({...owner, event: event('known')})).resolves.toMatchObject({
+            event: {messageId: 'known'},
+            leaseExpiresAt: 6_000
+        });
+        await expect(store.claimPendingEvents({...owner, limit: 5})).resolves.toMatchObject([
+            {event: {messageId: 'batch-1'}},
+            {event: {messageId: 'batch-2'}}
+        ]);
+
+        const transition = {
+            ...owner,
+            event: event('known'),
+            fencingToken: 'token'
+        };
+        await expect(store.completePublishedEvent(transition)).resolves.toBe(true);
+        await expect(store.releasePublishEvent({
+            ...transition,
+            nextAttemptAt: 8_000,
+            error: new Error('offline')
+        })).resolves.toBe(true);
+        await expect(store.claimPendingEvents({...owner, limit: 0})).resolves.toEqual([]);
+    });
 });
 
 function document(value: EventMessage): Record<string, unknown> {
@@ -69,28 +185,46 @@ function document(value: EventMessage): Record<string, unknown> {
 
 function fakeModel(options: {
     findOne?: unknown;
+    findOneSequence?: unknown[];
     find?: unknown[];
     createError?: Error;
+    findOneAndUpdate?: unknown[];
+    updateOneResults?: Array<{matchedCount: number}>;
 } = {}) {
-    const execOne = vi.fn(async () => options.findOne ?? null);
+    const findOneSequence = [...(options.findOneSequence ?? [])];
+    const execOne = vi.fn(async () => findOneSequence.length > 0
+        ? findOneSequence.shift()
+        : options.findOne ?? null);
     const execMany = vi.fn(async () => options.find ?? []);
     const limit = vi.fn(() => ({exec: execMany}));
     const sortMany = vi.fn(() => ({limit, exec: execMany}));
     const create = options.createError
         ? vi.fn().mockRejectedValue(options.createError)
         : vi.fn().mockResolvedValue(undefined);
-    const updateOne = vi.fn(() => ({exec: vi.fn().mockResolvedValue(undefined)}));
+    const updateOneResults = [...(options.updateOneResults ?? [])];
+    const updateOne = vi.fn(() => ({
+        exec: vi.fn().mockResolvedValue(updateOneResults.shift() ?? {matchedCount: 1})
+    }));
     const deleteOne = vi.fn(() => ({exec: vi.fn().mockResolvedValue(undefined)}));
     const findOne = vi.fn(() => ({exec: execOne}));
     const find = vi.fn(() => ({sort: sortMany}));
+    const findOneAndUpdateResults = [...(options.findOneAndUpdate ?? [])];
+    const findOneAndUpdate = vi.fn(() => ({
+        exec: vi.fn(async () => {
+            const result = findOneAndUpdateResults.shift() ?? null;
+            if (result instanceof Error) throw result;
+            return result;
+        })
+    }));
     const bulkWrite = vi.fn().mockResolvedValue(undefined);
     return {
-        model: {create, updateOne, deleteOne, findOne, find, bulkWrite} as unknown as Model<any>,
+        model: {create, updateOne, deleteOne, findOne, find, findOneAndUpdate, bulkWrite} as unknown as Model<any>,
         create,
         updateOne,
         deleteOne,
         findOne,
         find,
+        findOneAndUpdate,
         limit,
         bulkWrite
     };

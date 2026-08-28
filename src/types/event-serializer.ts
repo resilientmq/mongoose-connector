@@ -1,4 +1,4 @@
-import type {EventMessage} from '@resilientmq/core/dist/types/index.js';
+import type {EventMessage} from '@resilientmq/core';
 
 /** Provider-neutral MongoDB document used by serializer implementations. */
 export type StoredEventDocument = Record<string, unknown>;

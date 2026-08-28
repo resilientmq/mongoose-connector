@@ -1,4 +1,4 @@
-import type {EventMessage} from '@resilientmq/core/dist/types/index.js';
+import type {EventMessage} from '@resilientmq/core';
 import {DefaultEventSerializer, StandardEventSerializer, getSerializer} from '../src/index.js';
 
 describe('StandardEventSerializer', () => {

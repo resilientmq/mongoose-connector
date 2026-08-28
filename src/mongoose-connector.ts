@@ -3,7 +3,7 @@ import {
     ResilientEventPublisher,
     setLogLevel
 } from '@resilientmq/core';
-import type {EventMessage} from '@resilientmq/core/dist/types/index.js';
+import type {EventMessage} from '@resilientmq/core';
 import {getEventModel} from './setup/event-model.js';
 import {MongoConnection} from './state/mongo-connection.js';
 import {GenericMongooseStore} from './store/generic-store.js';
@@ -39,7 +39,7 @@ export class MongooseConnector {
         const {coreConfig, storeOptions} = splitConsumerConfig(configured);
         this.consumer = new ResilientConsumer({
             ...coreConfig,
-            store: this.createStore('consumer_event_log', storeOptions)
+            store: this.createStore('consumer_event_log', storeOptions, 'consumer')
         });
         return this.consumer;
     }
@@ -59,7 +59,7 @@ export class MongooseConnector {
         const {coreConfig, storeOptions} = splitPublisherConfig(configured);
         this.publisher = new ResilientEventPublisher({
             ...coreConfig,
-            store: this.createStore('publisher_event_log', storeOptions)
+            store: this.createStore('publisher_event_log', storeOptions, 'publisher')
         });
         return this.publisher;
     }
@@ -83,11 +83,16 @@ export class MongooseConnector {
         await this.mongoConnection.disconnect();
     }
 
-    private createStore(defaultName: string, options: MongooseStoreOptions): GenericMongooseStore {
+    private createStore(
+        defaultName: string,
+        options: MongooseStoreOptions,
+        role: 'consumer' | 'publisher'
+    ): GenericMongooseStore {
         const model = getEventModel(
             options.modelName ?? defaultName,
             options.model,
-            this.mongoConnection.client
+            this.mongoConnection.client,
+            role
         );
         return new GenericMongooseStore(model, options.serializer);
     }

@@ -1,4 +1,4 @@
-import type {ResilientConsumerConfig, ResilientPublisherConfig} from '@resilientmq/core/dist/types/index.js';
+import type {ResilientConsumerConfig, ResilientPublisherConfig} from '@resilientmq/core';
 import type {ConnectOptions, Model} from 'mongoose';
 import type {EventSerializer} from './event-serializer.js';
 

@@ -34,6 +34,12 @@ Connector 3 stores stable service identity, ephemeral instance identity,
 fencing tokens, and lease expiration. Claims and transitions use conditional
 MongoDB updates so a stale process cannot overwrite the replacement owner.
 
+The default consumer model has a unique compound `{serviceId, messageId}`
+index. The default publisher model has a unique `{messageId}` index. Operational
+indexes cover status, retry deadlines, lease expiration, creation order, and
+service ownership. Applications that inject custom models must provide the same
+lease fields and equivalent indexes.
+
 ## Upgrade policy
 
 Upgrade one connector major at a time and deploy schema/index changes before

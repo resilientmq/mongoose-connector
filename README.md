@@ -2,7 +2,7 @@
 
 <!-- Package -->
 [![npm version](https://img.shields.io/npm/v/@resilientmq/mongoose-connector.svg?logo=npm)](https://www.npmjs.com/package/@resilientmq/mongoose-connector)
-[![CI](https://img.shields.io/github/actions/workflow/status/resilientmq/mongoose-connector/ci.yml?branch=release%2Fcore-2.x&logo=github&label=CI)](https://github.com/resilientmq/mongoose-connector/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/resilientmq/mongoose-connector/ci.yml?branch=release%2Fcore-3.x&logo=github&label=CI)](https://github.com/resilientmq/mongoose-connector/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
@@ -10,7 +10,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%20%7C%2022%20%7C%2024-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Mongoose](https://img.shields.io/badge/Mongoose-8%20%7C%209-880000?logo=mongoose&logoColor=white)](https://mongoosejs.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-8-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![ResilientMQ core](https://img.shields.io/badge/ResilientMQ_core-2.x-5C2D91)](https://www.npmjs.com/package/@resilientmq/core)
+[![ResilientMQ core](https://img.shields.io/badge/ResilientMQ_core-3.x-5C2D91)](https://www.npmjs.com/package/@resilientmq/core)
 
 > Durable MongoDB inbox and outbox persistence for
 > [`@resilientmq/core`](https://www.npmjs.com/package/@resilientmq/core), with
@@ -50,6 +50,12 @@ await connector.publish(event);
 - **Durable inbox and outbox** — persists ResilientMQ event state in MongoDB.
 - **Idempotent insertion** — converts MongoDB duplicate-key conflicts into a
   deterministic `false` result.
+- **Atomic inbox leases** — one replica owns a delivery until completion or
+  lease expiration.
+- **Fenced transitions** — stale process generations cannot overwrite a newer
+  claim.
+- **Distributed outbox** — replicas split pending work through conditional
+  MongoDB claims instead of publishing the same row independently.
 - **Efficient backlog processing** — bounded, oldest-first pending queries and
   one-call `bulkWrite` status transitions.
 - **Reusable connections** — one object-oriented runtime shares MongoDB and
@@ -72,11 +78,9 @@ Install the connector major matching the `@resilientmq/core` major:
 | 2.x | `^2.3.1` | 8.x–9.x | 20.19, 22, 24 | Idempotent batch operations |
 | 3.x | `^3.0.0` | 8.x–9.x | 20.19, 22, 24 | Atomic leases and fencing |
 
-This branch builds connector 2.x for the latest core 2.x contract. It uses the
-idempotent insertion, status query, and batch update operations added by Core 2.
-Core 2 still does not expose the leases and fencing required to coordinate
-ownership after a process failure. Applications requiring replica-safe claims
-must use core and connector 3.x together.
+This branch builds connector 3.x for the Core 3 atomic persistence contract.
+Inbox ownership is partitioned by stable `serviceId` and `messageId`; outbox
+ownership uses expiring leases and a fresh fencing token on every claim.
 
 Every supported Node.js line, the declared core peer dependency, Mongoose, and
 a real MongoDB 8 service are exercised by CI.
@@ -84,7 +88,7 @@ a real MongoDB 8 service are exercised by CI.
 ## Installation
 
 ```bash
-npm install @resilientmq/core@^2.3.1 mongoose @resilientmq/mongoose-connector@^2
+npm install @resilientmq/core@^3.0.0 mongoose @resilientmq/mongoose-connector@^3
 ```
 
 ## Quick start
@@ -102,6 +106,9 @@ const connector = new MongooseConnector({
   rabbit: {
     consumer: {
       connection: process.env.AMQP_URL!,
+      serviceId: 'orders-consumer',
+      processingTimeoutMs: 60_000,
+      processingLeaseMs: 90_000,
       consumeQueue: {
         queue: 'orders.events',
         options: {durable: true}
@@ -113,6 +120,7 @@ const connector = new MongooseConnector({
     },
     publisher: {
       connection: process.env.AMQP_URL!,
+      serviceId: 'orders-publisher',
       exchange: {
         name: 'domain.events',
         type: 'topic',
@@ -142,20 +150,24 @@ event.
 
 ## Delivery model
 
-- MongoDB provides durable event state and a unique message identity.
+- MongoDB provides durable event state and indexed message identities.
 - Duplicate inserts are rejected by the database rather than by an unsafe
   read-before-write check.
-- Pending publication reads are ordered by creation time and explicitly
-  bounded.
+- Inbox claims use the stable core service hash plus the message ID, so distinct
+  logical consumers can process the same RabbitMQ event independently.
+- Active ownership records the ephemeral process ID, a unique fencing token,
+  and an expiration time.
+- Pending publication claims are ordered, bounded, and atomically partitioned
+  across replicas.
+- A process that resumes after its lease was recovered cannot apply its stale
+  completion or retry transition.
 - RabbitMQ and MongoDB do not participate in one distributed transaction.
 - Message handlers and external domain effects must therefore remain
   idempotent.
 
-Connector 2.x prevents duplicate persisted identities and reduces status-update
-round trips, but it cannot offer the
-atomic lease recovery and stale-owner fencing introduced by core 3.x. The
-[compatibility guide](docs/compatibility.md) documents this distinction in
-detail.
+These guarantees provide at-least-once delivery with exclusive database
+ownership; they do not provide exactly-once external side effects. The
+[compatibility guide](docs/compatibility.md) documents the contract in detail.
 
 ## Connector lifecycle
 
@@ -191,7 +203,8 @@ The facade delegates to the same reusable connector lifecycle.
 
 ## Event store
 
-`GenericMongooseStore` implements the full core 2.x `EventStore` contract:
+`GenericMongooseStore` implements the full Core 3 consumer and distributed
+publisher contracts:
 
 | Operation | MongoDB behavior |
 | --- | --- |
@@ -202,10 +215,18 @@ The facade delegates to the same reusable connector lifecycle.
 | `getPendingEvents` | Returns a bounded, oldest-first batch. |
 | `getEventsByStatus` | Returns events matching an exact status. |
 | `batchUpdateEventStatus` | Applies transitions through one `bulkWrite`. |
+| `claimConsumeEvent` | Atomically inserts or recovers a `PROCESSING` lease. |
+| `transitionConsumeEvent` | Transitions only for the current service, instance, and token. |
+| `claimPublishEvent` | Claims one ready or expired outbox document. |
+| `claimPendingEvents` | Atomically claims a bounded, ordered batch across replicas. |
+| `completePublishedEvent` | Completes only the active confirmed publication claim. |
+| `releasePublishEvent` | Releases the active claim with a delayed retry deadline. |
 
 The default model persists `messageId`, `type`, `payload`, `status`,
-`routingKey`, and AMQP `properties`. Default indexes cover message identity and
-pending status scans.
+`routingKey`, AMQP `properties`, service and instance identity, fencing token,
+lease and retry deadlines, attempts, completion timestamps, and bounded error
+details. Default indexes cover compound inbox identity, unique outbox identity,
+lease recovery, and pending status scans.
 
 ## Custom models and serialization
 
@@ -234,6 +255,13 @@ const serializer: EventSerializer = {
 
 Serializer objects must be stateless or safe for concurrent calls.
 
+Custom Core 3 models must also declare `serviceId`, `instanceId`,
+`fencingToken`, `leaseExpiresAt`, `attempt`, `lastAttemptAt`, `completedAt`,
+`nextAttemptAt`, `publishedAt`, `errorName`, `errorMessage`, and `errorStack`.
+Consumer models require a unique `{serviceId, messageId}` index; publisher
+models require a unique `{messageId}` index. The application owns these indexes
+when it supplies `rabbit.*.model`.
+
 ## Configuration
 
 ```ts
@@ -260,8 +288,8 @@ immediately with a descriptive error.
 ```text
 Application
   └─ MongooseConnector
-      ├─ ResilientConsumer ── GenericMongooseStore ── consumer model
-      ├─ ResilientPublisher ─ GenericMongooseStore ── publisher model
+      ├─ ResilientConsumer ── fenced inbox store ───── consumer model
+      ├─ ResilientPublisher ─ distributed outbox ───── publisher model
       └─ MongoConnection ───────────────────────────── MongoDB
 ```
 
@@ -301,7 +329,8 @@ MONGODB_URL=mongodb://localhost:27017/resilientmq npm run test:integration
 ```
 
 CI validates Node.js 20.19, 22, and 24, enforces at least 90% statement, line,
-and function coverage plus 80% branch coverage, and exercises MongoDB 8.
+and function coverage plus 80% branch coverage, and exercises concurrent claim,
+lease recovery, stale fencing, delayed retry, and MongoDB 8 behavior.
 
 ## Documentation
 

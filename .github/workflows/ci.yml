@@ -72,9 +72,13 @@ jobs:
           retention-days: 14
 
   mongodb:
-    name: MongoDB integration
+    name: MongoDB integration - Mongoose ${{ matrix.mongoose-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mongoose-version: ['8.24.4', '9.9.4']
     services:
       mongodb:
         image: mongo:8.0
@@ -95,6 +99,8 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - name: Install Mongoose compatibility version
+        run: npm install --no-save --package-lock=false mongoose@${{ matrix.mongoose-version }}
       - run: npm run test:integration
         env:
           MONGODB_URL: mongodb://127.0.0.1:27017/resilientmq_connector_test
