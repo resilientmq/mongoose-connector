@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit compatibility with `@resilientmq/core` 2.3.1.
 - Native idempotent insertion, exact-status queries, and bulk status updates for
   the Core 2 optimized event-store surface.
+### Fixed
+
+- Create a missing package version tag after successful `master` CI and
+  explicitly dispatch the OIDC release workflow from that tag.
+
 
 ### Changed
 
